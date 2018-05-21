@@ -1,4 +1,4 @@
-package goscraper
+package main
 
 import (
 	"bytes"
@@ -22,6 +22,7 @@ type Scraper struct {
 	Url                *url.URL
 	EscapedFragmentUrl *url.URL
 	MaxRedirect        int
+	Client             *http.Client
 }
 
 type Document struct {
@@ -36,16 +37,16 @@ type DocumentPreview struct {
 	Link        string
 }
 
-func Scrape(uri string, maxRedirect int) (*Document, error) {
+func Scrape(uri string, maxRedirect int, client *http.Client) (*Document, error) {
 	u, err := url.Parse(uri)
 	if err != nil {
 		return nil, err
 	}
-	return (&Scraper{Url: u, MaxRedirect: maxRedirect}).Scrape()
+	return (&Scraper{Url: u, MaxRedirect: maxRedirect, Client:client}).Scrape()
 }
 
 func (scraper *Scraper) Scrape() (*Document, error) {
-	doc, err := scraper.getDocument()
+	doc, err := scraper.getDocument(scraper.Client)
 	if err != nil {
 		return nil, err
 	}
@@ -106,7 +107,7 @@ func (scraper *Scraper) toFragmentUrl() error {
 	return nil
 }
 
-func (scraper *Scraper) getDocument() (*Document, error) {
+func (scraper *Scraper) getDocument(client *http.Client) (*Document, error) {
 	scraper.MaxRedirect -= 1
 	if strings.Contains(scraper.Url.String(), "#!") {
 		scraper.toFragmentUrl()
@@ -121,7 +122,7 @@ func (scraper *Scraper) getDocument() (*Document, error) {
 	}
 	req.Header.Add("User-Agent", "GoScraper")
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := client.Do(req)
 	if resp != nil {
 		defer resp.Body.Close()
 	}
@@ -284,7 +285,7 @@ func (scraper *Scraper) parseDocument(doc *Document) error {
 			}
 			scraper.Url = canonicalUrl
 			scraper.EscapedFragmentUrl = nil
-			fdoc, err := scraper.getDocument()
+			fdoc, err := scraper.getDocument(scraper.Client)
 			if err != nil {
 				return err
 			}
@@ -294,7 +295,7 @@ func (scraper *Scraper) parseDocument(doc *Document) error {
 
 		if hasFragment && headPassed && scraper.MaxRedirect > 0 {
 			scraper.toFragmentUrl()
-			fdoc, err := scraper.getDocument()
+			fdoc, err := scraper.getDocument(scraper.Client)
 			if err != nil {
 				return err
 			}
